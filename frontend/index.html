@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Anti-Ragging System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h1>🚨 Anti-Ragging Complaint System</h1>
+
+<!-- Submit -->
+<h2>Submit Complaint</h2>
+<textarea id="description" placeholder="Describe incident..."></textarea><br>
+<button onclick="submitComplaint()">Submit</button>
+
+<p id="response"></p>
+
+<hr>
+
+<!-- Status -->
+<h2>Check Status</h2>
+<input id="trackId" placeholder="Enter Tracking ID">
+<button onclick="checkStatus()">Check</button>
+
+<p id="statusResult"></p>
+
+<script src="script.js"></script>
+</body>
+</html>

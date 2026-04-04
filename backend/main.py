@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
-load_dotenv(dotenv_path="../.env")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 from fastapi import FastAPI
 
 app = FastAPI()
@@ -18,8 +19,6 @@ from email.mime.text import MIMEText
 
 def send_email_alert(description, tracking_id):
     print("INSIDE EMAIL FUNCTION")
-    print("EMAIL:", sender_email)
-    print("PASS:", sender_password)
     sender_email = os.getenv("EMAIL_USER")
     sender_password = os.getenv("EMAIL_PASS")
     receiver_email = os.getenv("RECEIVER_EMAIL")
