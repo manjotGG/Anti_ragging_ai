@@ -1,4 +1,5 @@
 import os
+from ai import analyze_with_ai
 from dotenv import load_dotenv
 load_dotenv(dotenv_path="../.env")
 from fastapi import FastAPI
@@ -16,10 +17,8 @@ import uuid
 import smtplib
 from email.mime.text import MIMEText
 
-def send_email_alert(description, tracking_id):
+def send_email_alert(description, tracking_id, accused_name=None):
     print("INSIDE EMAIL FUNCTION")
-    print("EMAIL:", sender_email)
-    print("PASS:", sender_password)
     sender_email = os.getenv("EMAIL_USER")
     sender_password = os.getenv("EMAIL_PASS")
     receiver_email = os.getenv("RECEIVER_EMAIL")
@@ -30,6 +29,7 @@ def send_email_alert(description, tracking_id):
 
     Tracking ID: {tracking_id}
     Description: {description}
+    Accused: {accused_name if accused_name else "Not mentioned"}
     """
 
     msg = MIMEText(body)
@@ -61,30 +61,46 @@ def generate_tracking_id():
 def report_complaint(data: Complaint):
     description = data.description
 
-    # 🧠 classification (your existing logic)
-    category, severity = analyze_text_basic(description)
+    # 🧠 AI ANALYSIS (Gemini)
+    ai_result = analyze_with_ai(description)
+
+    category = ai_result["category"]
+    severity = ai_result["severity"]
+    emotion = ai_result["emotion"]
+    confidence = ai_result["confidence"]
+
+    accused_name = ai_result.get("accused_name")
+    if accused_name:
+        accused_name = accused_name.strip().title()
+
+    # 🔁 fallback
+    if not accused_name:
+        accused_name = extract_name_fallback(description)
 
     # 🚨 flag system
     is_flagged = True if severity == "high" else False
 
     # ❤️ emotional support
-    emotion_message = emotional_response(description)
+    emotion_message = emotional_response(emotion, description)
 
     tracking_id = generate_tracking_id()
 
+    # 🚨 email alert
     if severity == "high":
         try:
-            send_email_alert(description, tracking_id)
+            send_email_alert(description, tracking_id, accused_name)
         except Exception as e:
             print("Email failed:", e)
 
+    # 💾 DB save
     conn = get_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
-        INSERT INTO complaints (tracking_id, description, ai_category, ai_severity)
-        VALUES (%s, %s, %s, %s)
-    """, (tracking_id, description, category, severity))
+    INSERT INTO complaints 
+    (tracking_id, description, ai_category, ai_severity, emotion, confidence, accused_name)
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
+""", (tracking_id, description, category, severity, emotion, confidence, accused_name))
 
     conn.commit()
     cursor.close()
@@ -95,6 +111,8 @@ def report_complaint(data: Complaint):
         "tracking_id": tracking_id,
         "category": category,
         "severity": severity,
+        "emotion": emotion,
+        "confidence": confidence,
         "flagged": is_flagged,
         "support_message": emotion_message
     }
@@ -177,17 +195,24 @@ def get_flagged_complaints():
     return {"flagged_complaints": complaints}
 
 
-def emotional_response(text):
-    text = text.lower()
+def emotional_response(emotion, text=None):
+    emotion = emotion.strip().lower()  # 🔥 FIX
 
-    if any(word in text for word in ["scared", "afraid", "fear", "threat"]):
+    if emotion == "fear":
         return "You are not alone. Your safety is important. Help is available."
 
-    if any(word in text for word in ["embarrassed", "ashamed", "humiliated"]):
-        return "It's okay to speak up. You did the right thing by reporting this."
+    elif emotion == "anger":
+        return "It's okay to feel angry. Stay calm and report safely."
 
-    if any(word in text for word in ["bullied", "harassed", "abused"]):
-        return "This behavior is not acceptable. We take this seriously and will act on it."
+    elif emotion == "neutral":
+        return "Thank you for reporting. We are here to support you."
+
+    # fallback (your old logic)
+    if text:
+        text = text.lower()
+
+        if any(word in text for word in ["scared", "afraid", "fear", "threat"]):
+            return "You are not alone. Your safety is important. Help is available."
 
     return "Thank you for reporting. We are here to support you."
 
@@ -250,3 +275,24 @@ def evidence_help():
         ]
     }
 
+import re
+
+def extract_name_fallback(text):
+    words = text.lower().split()
+
+    # 🔥 Priority: word after "by"
+    if "by" in words:
+        idx = words.index("by")
+        if idx + 1 < len(words):
+            return words[idx + 1].strip(",.!?").title()
+
+    # 🔁 fallback: find probable name
+    ignore = {"i", "me", "my", "got", "slapped", "hit", "by", "the", "a", "an", "senior"}
+
+    for word in words:
+        clean = word.strip(",.!?")
+
+        if clean not in ignore and clean.isalpha() and len(clean) > 3:
+            return clean.title()
+
+    return None
