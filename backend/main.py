@@ -296,3 +296,43 @@ def extract_name_fallback(text):
             return clean.title()
 
     return None
+
+@app.put("/admin/close/{tracking_id}")
+def close_complaint(tracking_id: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        UPDATE complaints
+        SET status = 'resolved'
+        WHERE tracking_id = %s
+        RETURNING tracking_id, status
+    """, (tracking_id,))
+
+    result = cursor.fetchone()
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    if not result:
+        return {"error": "Tracking ID not found"}
+
+    return {
+        "message": "Complaint closed successfully",
+        "tracking_id": result[0],
+        "status": result[1]
+    }
+
+@app.get("/admin/complaints")
+def get_all_complaints():
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM complaints ORDER BY created_at DESC")
+    data = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return {"complaints": data}
