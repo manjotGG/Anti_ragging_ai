@@ -2,9 +2,25 @@ import os
 from ai import analyze_with_ai
 from dotenv import load_dotenv
 load_dotenv(dotenv_path="../.env")
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def home():
@@ -51,6 +67,32 @@ def send_email_alert(description, tracking_id, accused_name=None):
 # ✅ This fixes Swagger UI input
 class Complaint(BaseModel):
     description: str
+
+class AdminCredentials(BaseModel):
+    username: str
+    password: str
+
+ADMIN_USERNAME = os.getenv('ADMIN_USER')
+ADMIN_PASSWORD = os.getenv('ADMIN_PASS')
+ADMIN_TOKEN = os.getenv('ADMIN_TOKEN')
+
+
+def get_current_admin(authorization: str | None = Header(None)):
+    if not authorization or not authorization.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail='Unauthorized')
+
+    token = authorization.split(' ', 1)[1]
+    if token != ADMIN_TOKEN:
+        raise HTTPException(status_code=401, detail='Unauthorized')
+
+    return token
+
+
+@app.post("/admin/login")
+def admin_login(data: AdminCredentials):
+    if data.username == ADMIN_USERNAME and data.password == ADMIN_PASSWORD:
+        return {"token": ADMIN_TOKEN}
+    raise HTTPException(status_code=401, detail="Invalid admin credentials")
 
 
 def generate_tracking_id():
@@ -166,14 +208,15 @@ def analyze_text_basic(text):
     return "ragging", "low"
 
 @app.get("/admin/flagged")
-def get_flagged_complaints():
+def get_flagged_complaints(current_admin: str = Depends(get_current_admin)):
     conn = get_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT tracking_id, description, ai_category, ai_severity, created_at
+        SELECT tracking_id, description, ai_category, ai_severity, status, accused_name, created_at
         FROM complaints
         WHERE ai_severity = 'high'
+        ORDER BY created_at DESC
     """)
 
     results = cursor.fetchall()
@@ -189,10 +232,71 @@ def get_flagged_complaints():
             "description": row[1],
             "category": row[2],
             "severity": row[3],
-            "created_at": row[4]
+            "status": row[4],
+            "accused_name": row[5],
+            "created_at": row[6]
         })
 
     return {"flagged_complaints": complaints}
+
+
+@app.get("/admin/complaints")
+def get_all_complaints(current_admin: str = Depends(get_current_admin)):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT tracking_id, description, ai_category, ai_severity, status, accused_name, created_at
+        FROM complaints
+        ORDER BY created_at DESC
+    """)
+
+    results = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    complaints = []
+
+    for row in results:
+        complaints.append({
+            "tracking_id": row[0],
+            "description": row[1],
+            "category": row[2],
+            "severity": row[3],
+            "status": row[4],
+            "accused_name": row[5],
+            "created_at": row[6]
+        })
+
+    return {"complaints": complaints}
+
+
+@app.put("/admin/close/{tracking_id}")
+def close_complaint(tracking_id: str, current_admin: str = Depends(get_current_admin)):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        UPDATE complaints
+        SET status = 'resolved'
+        WHERE tracking_id = %s
+        RETURNING tracking_id, status
+    """, (tracking_id,))
+
+    result = cursor.fetchone()
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    if not result:
+        return {"error": "Tracking ID not found"}
+
+    return {
+        "message": "Complaint closed",
+        "tracking_id": result[0],
+        "status": result[1]
+    }
 
 
 def emotional_response(emotion, text=None):
