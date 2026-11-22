@@ -5,13 +5,13 @@
 
     <form @submit.prevent="handleLogin" class="mt-8 space-y-5">
       <div>
-        <label class="text-sm font-medium text-slate-700 dark:text-slate-200">Username</label>
-        <input v-model="username" type="text" autocomplete="username" placeholder="admin" class="mt-2 w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-indigo-400 dark:focus:ring-indigo-900" />
+        <label for="admin-username" class="text-sm font-medium text-slate-700 dark:text-slate-200">Username</label>
+        <input id="admin-username" v-model="username" type="text" autocomplete="username" placeholder="admin" class="mt-2 w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-indigo-400 dark:focus:ring-indigo-900" />
       </div>
 
       <div>
-        <label class="text-sm font-medium text-slate-700 dark:text-slate-200">Password</label>
-        <input v-model="password" type="password" autocomplete="current-password" placeholder="••••••••" class="mt-2 w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-indigo-400 dark:focus:ring-indigo-900" />
+        <label for="admin-password" class="text-sm font-medium text-slate-700 dark:text-slate-200">Password</label>
+        <input id="admin-password" v-model="password" type="password" autocomplete="current-password" placeholder="••••••••" class="mt-2 w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-indigo-400 dark:focus:ring-indigo-900" />
       </div>
 
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
