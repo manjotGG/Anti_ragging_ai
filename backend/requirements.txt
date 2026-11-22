@@ -1,0 +1,6 @@
+fastapi>=0.100,<1
+pydantic>=2,<3
+uvicorn>=0.23,<1
+python-dotenv>=1,<2
+psycopg2-binary>=2.9,<3
+requests>=2.31,<3

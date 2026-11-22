@@ -1,7 +1,16 @@
 import os
-from ai import analyze_with_ai
+from pathlib import Path
 from dotenv import load_dotenv
-load_dotenv(dotenv_path="../.env")
+load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
+
+if __package__:
+    from .ai import AnalysisUnavailable, ComplaintAnalysis, analyze_with_ai
+    from .database import get_connection
+    from .validation import DETAIL_MESSAGE, validate_description
+else:
+    from ai import AnalysisUnavailable, ComplaintAnalysis, analyze_with_ai
+    from database import get_connection
+    from validation import DETAIL_MESSAGE, validate_description
 from fastapi import FastAPI, Depends, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -27,8 +36,7 @@ def home():
     return {"message": "Anti-Ragging AI Backend Running"}
 
 
-from pydantic import BaseModel
-from database import get_connection
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 import uuid
 import smtplib
 from email.mime.text import MIMEText
@@ -54,7 +62,7 @@ def send_email_alert(description, tracking_id, accused_name=None):
     msg["To"] = receiver_email
 
     try:
-        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server = smtplib.SMTP("smtp.gmail.com", 587, timeout=10)
         server.starttls()
         server.login(sender_email, sender_password)
         server.send_message(msg)
@@ -64,9 +72,9 @@ def send_email_alert(description, tracking_id, accused_name=None):
         print("Email error:", e)
 
 
-# ✅ This fixes Swagger UI input
 class Complaint(BaseModel):
-    description: str
+    model_config = ConfigDict(strict=True)
+    description: str = Field(max_length=5000)
 
 class AdminCredentials(BaseModel):
     username: str
@@ -101,10 +109,28 @@ def generate_tracking_id():
 
 @app.post("/report")
 def report_complaint(data: Complaint):
-    description = data.description
+    try:
+        description = validate_description(data.description)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    # 🧠 AI ANALYSIS (Gemini)
-    ai_result = analyze_with_ai(description)
+    try:
+        # Revalidate at the persistence boundary too: a partial or malformed
+        # analysis must never fall through to a database insert.
+        ai_result = ComplaintAnalysis.model_validate(analyze_with_ai(description)).model_dump()
+    except (AnalysisUnavailable, ValidationError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="We couldn't check your report right now. It has not been submitted. "
+                   "Please try again shortly, or contact your college's anti-ragging committee.",
+        ) from exc
+
+    if not ai_result["is_valid_complaint"]:
+        detail = DETAIL_MESSAGE
+        if ai_result["invalid_reason"] == "not_incident":
+            detail = "Please describe a ragging, bullying, harassment, or student safety incident " \
+                     "so the support team can understand what happened."
+        raise HTTPException(status_code=422, detail=detail)
 
     category = ai_result["category"]
     severity = ai_result["severity"]
@@ -113,11 +139,7 @@ def report_complaint(data: Complaint):
 
     accused_name = ai_result.get("accused_name")
     if accused_name:
-        accused_name = accused_name.strip().title()
-
-    # 🔁 fallback
-    if not accused_name:
-        accused_name = extract_name_fallback(description)
+        accused_name = accused_name.strip()
 
     # 🚨 flag system
     is_flagged = True if severity == "high" else False
@@ -127,26 +149,31 @@ def report_complaint(data: Complaint):
 
     tracking_id = generate_tracking_id()
 
+    # 💾 DB save
+    conn = get_connection()
+    cursor = None
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO complaints
+            (tracking_id, description, ai_category, ai_severity, emotion, confidence, accused_name)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (tracking_id, description, category, severity, emotion, confidence, accused_name))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        if cursor is not None:
+            cursor.close()
+        conn.close()
+
     # 🚨 email alert
     if severity == "high":
         try:
             send_email_alert(description, tracking_id, accused_name)
         except Exception as e:
             print("Email failed:", e)
-
-    # 💾 DB save
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-    INSERT INTO complaints 
-    (tracking_id, description, ai_category, ai_severity, emotion, confidence, accused_name)
-    VALUES (%s, %s, %s, %s, %s, %s, %s)
-""", (tracking_id, description, category, severity, emotion, confidence, accused_name))
-
-    conn.commit()
-    cursor.close()
-    conn.close()
 
     return {
         "message": "Complaint submitted",
@@ -184,28 +211,6 @@ def check_status(tracking_id: str):
         "description": result[1],
         "created_at": result[2]
     }
-
-def analyze_text_basic(text):
-    text = text.lower()
-
-    # 🔴 High severity (harassment / physical abuse)
-    high_keywords = ["slap", "hit", "abuse", "force", "threat"]
-
-    # 🟡 Medium severity (ragging / bullying)
-    medium_keywords = ["bully", "harass", "insult"]
-
-    # 🔴 Check high severity
-    for word in high_keywords:
-        if word in text:
-            return "harassment", "high"
-
-    # 🟡 Check medium severity
-    for word in medium_keywords:
-        if word in text:
-            return "ragging", "medium"
-
-    # 🟢 Default
-    return "ragging", "low"
 
 @app.get("/admin/flagged")
 def get_flagged_complaints(current_admin: str = Depends(get_current_admin)):
@@ -306,7 +311,7 @@ def emotional_response(emotion, text=None):
         return "You are not alone. Your safety is important. Help is available."
 
     elif emotion == "anger":
-        return "It's okay to feel angry. Stay calm and report safely."
+        return "You deserve to be treated with respect. Thank you for sharing what happened."
 
     elif emotion == "neutral":
         return "Thank you for reporting. We are here to support you."
@@ -378,65 +383,3 @@ def evidence_help():
             "Chat logs"
         ]
     }
-
-import re
-
-def extract_name_fallback(text):
-    words = text.lower().split()
-
-    # 🔥 Priority: word after "by"
-    if "by" in words:
-        idx = words.index("by")
-        if idx + 1 < len(words):
-            return words[idx + 1].strip(",.!?").title()
-
-    # 🔁 fallback: find probable name
-    ignore = {"i", "me", "my", "got", "slapped", "hit", "by", "the", "a", "an", "senior"}
-
-    for word in words:
-        clean = word.strip(",.!?")
-
-        if clean not in ignore and clean.isalpha() and len(clean) > 3:
-            return clean.title()
-
-    return None
-
-@app.put("/admin/close/{tracking_id}")
-def close_complaint(tracking_id: str):
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        UPDATE complaints
-        SET status = 'resolved'
-        WHERE tracking_id = %s
-        RETURNING tracking_id, status
-    """, (tracking_id,))
-
-    result = cursor.fetchone()
-
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-    if not result:
-        return {"error": "Tracking ID not found"}
-
-    return {
-        "message": "Complaint closed successfully",
-        "tracking_id": result[0],
-        "status": result[1]
-    }
-
-@app.get("/admin/complaints")
-def get_all_complaints():
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT * FROM complaints ORDER BY created_at DESC")
-    data = cursor.fetchall()
-
-    cursor.close()
-    conn.close()
-
-    return {"complaints": data}
