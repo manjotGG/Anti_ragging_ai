@@ -2,7 +2,7 @@ import { reactive } from 'vue'
 import axios from 'axios'
 
 const LOCAL_STORAGE_KEY = 'admin_token'
-const API_BASE = 'http://127.0.0.1:8000'
+import { API_BASE } from '../utils/api'
 
 const state = reactive({
   token: localStorage.getItem(LOCAL_STORAGE_KEY) || '',

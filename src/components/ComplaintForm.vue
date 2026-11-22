@@ -1,116 +1,80 @@
 <template>
-  <div class="space-y-6">
-    <div class="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-      <div class="space-y-4 rounded-3xl border border-slate-200/80 bg-slate-50 p-6 shadow-soft dark:border-slate-700/80 dark:bg-slate-950/80">
-        <div>
-          <p class="text-sm uppercase tracking-[0.3em] text-indigo-600">Make a report</p>
-          <h2 class="mt-2 text-2xl font-semibold">Submit your complaint</h2>
-          <p class="mt-2 text-slate-600 dark:text-slate-300">Enter details below or use voice input to file a complaint quickly.</p>
-        </div>
-
-        <div class="space-y-3">
-          <label class="block text-sm font-medium text-slate-700 dark:text-slate-200">Complaint description</label>
-          <textarea v-model="complaint" rows="7" placeholder="Describe the incident in as much detail as possible" class="w-full rounded-3xl border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-indigo-400 dark:focus:ring-indigo-900"></textarea>
-        </div>
-
-        <VoiceInput @transcript="onTranscript" />
-
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div class="space-y-1">
-            <p class="text-sm text-slate-500 dark:text-slate-400">Backend endpoint</p>
-            <p class="text-sm font-semibold text-slate-700 dark:text-slate-200">POST /report</p>
-          </div>
-          <button @click="submitComplaint" :disabled="isLoading || !complaint.trim()" class="inline-flex items-center justify-center rounded-full bg-indigo-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50">
-            <span v-if="isLoading" class="mr-2">Submitting…</span>
-            <span v-else>Send Report</span>
-          </button>
-        </div>
-
-        <p v-if="formError" class="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-700/40 dark:bg-red-950/40 dark:text-red-200">{{ formError }}</p>
-      </div>
-
-      <div class="space-y-4 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-soft dark:border-slate-700/80 dark:bg-slate-950/90">
-        <div class="flex items-center justify-between gap-3">
-          <div>
-            <p class="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">AI analysis</p>
-            <h2 class="mt-2 text-xl font-semibold">Instant response</h2>
-          </div>
-          <div class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-sm text-slate-600 shadow-sm dark:bg-slate-800 dark:text-slate-300">
-            <span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
-            Live feedback
-          </div>
-        </div>
-
-        <div class="grid gap-4">
-          <div v-if="reportResult" class="space-y-4 rounded-3xl border border-slate-200/80 bg-slate-50 p-5 dark:border-slate-700/80 dark:bg-slate-900/90">
-            <div class="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <p class="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Tracking ID</p>
-                <p class="mt-2 text-lg font-semibold text-slate-900 dark:text-slate-100">{{ reportResult.tracking_id }}</p>
-              </div>
-              <span :class="severityBadge(reportResult.severity)">{{ reportResult.severity }}</span>
-            </div>
-
-            <div class="grid gap-3 sm:grid-cols-2">
-              <div class="rounded-3xl bg-white p-4 shadow-sm dark:bg-slate-950">
-                <p class="text-sm text-slate-500 dark:text-slate-400">Category</p>
-                <p class="mt-2 font-semibold text-slate-900 dark:text-slate-100">{{ reportResult.category }}</p>
-              </div>
-              <div class="rounded-3xl bg-white p-4 shadow-sm dark:bg-slate-950">
-                <p class="text-sm text-slate-500 dark:text-slate-400">Emotion</p>
-                <p class="mt-2 font-semibold text-slate-900 dark:text-slate-100">{{ reportResult.emotion }}</p>
-              </div>
-            </div>
-
-            <p class="rounded-3xl bg-indigo-50 px-4 py-4 text-sm text-slate-700 dark:bg-indigo-950/40 dark:text-slate-200">{{ reportResult.support_message }}</p>
-          </div>
-
-          <div v-else class="rounded-3xl border border-dashed border-slate-300 p-6 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-            Submit a complaint to view the AI classification, severity, and support response here.
-          </div>
-        </div>
-      </div>
+  <div class="form-content">
+    <template v-if="!reportResult">
+      <p class="eyebrow">MAKE YOURSELF HEARD</p>
+      <h2 class="section-title">Share what happened</h2>
+      <p class="section-description">We’re here to listen. Describe the incident in your own words.</p>
+      <form @submit.prevent="submitComplaint" :aria-busy="isLoading" class="complaint-form">
+        <div class="field-heading"><label for="complaint-description">Your experience <span class="required-label">(required)</span></label><span class="optional-label">Text or voice</span></div>
+        <textarea id="complaint-description" ref="descriptionInput" v-model="complaint" rows="8" maxlength="5000" required :readonly="isLoading" :aria-invalid="Boolean(formError)" :aria-describedby="formError ? 'description-help description-count complaint-error' : 'description-help description-count'" placeholder="For example: A senior threatened me outside the hostel yesterday. I’m worried it could happen again." @input="formError = ''"></textarea>
+        <div class="field-meta"><p id="description-help">A short sentence is enough to start. Please describe an incident.</p><span id="description-count">{{ complaint.length.toLocaleString() }} / 5,000</span></div>
+        <VoiceInput :disabled="isLoading" @transcript="onTranscript" @recording="isRecording = $event" />
+        <p v-if="formError" id="complaint-error" class="feedback feedback-error" role="alert"><AppIcon name="info" /><span>{{ formError }}</span></p>
+        <div class="submission-note"><AppIcon name="lock" /><p>You don’t need to include your name. Your description will be shared with staff who review reports.</p></div>
+        <div class="form-actions"><span class="small-note">One step at a time.</span><button type="submit" class="primary-button" :disabled="isLoading || isRecording || !complaint.trim()"><span v-if="isLoading" class="spinner" aria-hidden="true"></span><AppIcon v-else name="shield" />{{ isLoading ? 'Checking your report…' : 'Submit report' }}</button></div>
+        <p v-if="isLoading" role="status" class="small-note">This may take a moment. Please keep this page open.</p>
+      </form>
+    </template>
+    <div v-else class="success-content" role="status" aria-live="polite">
+      <span class="success-icon"><AppIcon name="check" /></span>
+      <p class="eyebrow">YOUR REPORT IS SAVED</p>
+      <h2 class="section-title">Thank you for speaking up.</h2>
+      <p class="section-description">{{ reportResult.support_message }}</p>
+      <div class="tracking-receipt"><label for="receipt-id">Your tracking ID</label><div class="receipt-row"><input id="receipt-id" :value="reportResult.tracking_id" readonly /><button type="button" class="secondary-button" @click="copyId"><AppIcon name="copy" />{{ copyMessage || 'Copy ID' }}</button></div><p>Keep this ID somewhere private. You’ll need it to check updates.</p></div>
+      <p class="small-note">Your report is awaiting staff review.</p>
+      <div class="success-actions"><button class="primary-button" @click="emit('track', reportResult.tracking_id)">Track this report</button><button class="secondary-button" @click="startNewReport">Share another concern</button></div>
     </div>
   </div>
 </template>
-
 <script setup>
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import axios from 'axios'
 import VoiceInput from './VoiceInput.vue'
-
+import AppIcon from './AppIcon.vue'
+import { API_BASE, apiError } from '../utils/api'
+import { descriptionError } from '../utils/validation'
+const emit = defineEmits(['track'])
 const complaint = ref('')
 const reportResult = ref(null)
 const isLoading = ref(false)
+const isRecording = ref(false)
 const formError = ref('')
-const API_BASE = 'http://127.0.0.1:8000'
-
+const copyMessage = ref('')
+const descriptionInput = ref(null)
 function onTranscript(text) {
-  complaint.value = text
-}
-
-function severityBadge(severity) {
-  if (severity === 'high') return 'rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white'
-  if (severity === 'medium') return 'rounded-full bg-amber-500 px-3 py-1 text-xs font-semibold text-slate-950'
-  return 'rounded-full bg-emerald-500 px-3 py-1 text-xs font-semibold text-white'
-}
-
-async function submitComplaint() {
+  // Voice is inserted without overwriting text the student has already written.
+  complaint.value = [complaint.value.trim(), text.trim()].filter(Boolean).join(' ').slice(0, 5000)
   formError.value = ''
+}
+async function copyId() {
+  try {
+    await navigator.clipboard.writeText(reportResult.value.tracking_id)
+    copyMessage.value = 'Copied'
+  } catch {
+    copyMessage.value = 'Select ID to copy'
+  }
+}
+async function startNewReport() {
   reportResult.value = null
-  const payload = complaint.value.trim()
-  if (!payload) {
-    formError.value = 'Please add a complaint description before submitting.'
+  copyMessage.value = ''
+  await nextTick()
+  descriptionInput.value?.focus()
+}
+async function submitComplaint() {
+  if (isLoading.value || isRecording.value) return
+  const payload = complaint.value.normalize('NFC').trim()
+  formError.value = descriptionError(payload)
+  if (formError.value) {
+    descriptionInput.value?.focus()
     return
   }
-
   isLoading.value = true
   try {
-    const response = await axios.post(`${API_BASE}/report`, { description: payload })
+    const response = await axios.post(`${API_BASE}/report`, { description: payload }, { timeout: 45000 })
     reportResult.value = response.data
     complaint.value = ''
   } catch (error) {
-    formError.value = error.response?.data?.error || error.message || 'Submission failed. Please try again.'
+    formError.value = apiError(error, 'We couldn’t submit your report. Your text is still here. Please try again.')
   } finally {
     isLoading.value = false
   }

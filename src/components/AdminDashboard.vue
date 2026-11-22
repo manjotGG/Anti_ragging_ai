@@ -8,7 +8,7 @@
       <input v-model="searchQuery" placeholder="Search complaints" class="w-full max-w-md rounded-3xl border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-indigo-400 dark:focus:ring-indigo-900" />
     </div>
 
-    <div class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-soft dark:border-slate-700 dark:bg-slate-950">
+    <div class="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-soft dark:border-slate-700 dark:bg-slate-950">
       <table class="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
         <thead class="bg-slate-100 text-left text-xs uppercase tracking-[0.3em] text-slate-600 dark:bg-slate-900 dark:text-slate-400">
           <tr>
@@ -32,7 +32,7 @@
             <td class="px-4 py-4 text-sm text-slate-700 dark:text-slate-300">{{ complaint.accused_name || 'N/A' }}</td>
             <td class="px-4 py-4 text-sm text-slate-700 dark:text-slate-300">{{ complaint.description }}</td>
             <td class="px-4 py-4">
-              <button @click="closeComplaint(complaint.tracking_id)" :disabled="complaint.status === 'resolved'" class="rounded-full px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40" :class="complaint.status === 'resolved' ? 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-400' : 'bg-emerald-600 text-white hover:bg-emerald-500'">Close शिकायत</button>
+              <button @click="closeComplaint(complaint.tracking_id)" :disabled="complaint.status === 'resolved'" class="rounded-full px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40" :class="complaint.status === 'resolved' ? 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-400' : 'bg-emerald-600 text-white hover:bg-emerald-500'">Mark resolved</button>
             </td>
           </tr>
         </tbody>
@@ -62,7 +62,7 @@ import axios from 'axios'
 
 import auth from '../store/auth'
 
-const API_BASE = 'http://127.0.0.1:8000'
+import { API_BASE } from '../utils/api'
 const complaints = ref([])
 const searchQuery = ref('')
 const toast = reactive({ message: '', type: 'info' })

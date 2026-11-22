@@ -1,28 +1,22 @@
 <template>
-  <button @click="toggleTheme" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition duration-300 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700">
-    <span v-if="isDark">☀️ Light</span>
-    <span v-else>🌙 Dark</span>
-  </button>
+  <button @click="toggleTheme" class="theme-button" :aria-label="isDark ? 'Switch to light theme' : 'Switch to dark theme'" :title="isDark ? 'Switch to light theme' : 'Switch to dark theme'"><AppIcon :name="isDark ? 'sun' : 'moon'" /></button>
 </template>
-
 <script setup>
-import { ref, onMounted } from 'vue'
-
-const STORAGE_KEY = 'theme'
-const isDark = ref(false)
-
+import { onMounted, ref } from 'vue'
+import AppIcon from './AppIcon.vue'
+const isDark = ref(document.documentElement.classList.contains('dark'))
 function applyTheme(value) {
   isDark.value = value === 'dark'
   document.documentElement.classList.toggle('dark', isDark.value)
-  localStorage.setItem(STORAGE_KEY, value)
 }
-
 function toggleTheme() {
-  applyTheme(isDark.value ? 'light' : 'dark')
+  const value = isDark.value ? 'light' : 'dark'
+  applyTheme(value)
+  try { localStorage.setItem('theme', value) } catch { /* Theme still works without storage. */ }
 }
-
 onMounted(() => {
-  const saved = localStorage.getItem(STORAGE_KEY) || 'dark'
-  applyTheme(saved)
+  let saved
+  try { saved = localStorage.getItem('theme') } catch { /* Use light by default. */ }
+  applyTheme(saved || 'light')
 })
 </script>

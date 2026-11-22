@@ -1,87 +1,53 @@
 <template>
-  <div class="space-y-6">
-    <div class="rounded-3xl border border-slate-200/80 bg-slate-50 p-6 shadow-soft dark:border-slate-700/80 dark:bg-slate-950/80">
-      <div>
-        <p class="text-sm uppercase tracking-[0.3em] text-indigo-600">Track complaint</p>
-        <h2 class="mt-2 text-2xl font-semibold">Enter your tracking ID</h2>
-      </div>
-
-      <form @submit.prevent="loadStatus" class="grid gap-4 sm:grid-cols-[1fr_auto]">
-        <input v-model="trackingId" placeholder="Tracking ID" class="w-full rounded-3xl border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-indigo-400 dark:focus:ring-indigo-900" />
-        <button type="submit" class="rounded-3xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500">Check Status</button>
-      </form>
-
-      <p class="text-sm text-slate-500 dark:text-slate-400">Use the ID provided after complaint submission to check progress and resolution.</p>
+  <div class="form-content">
+    <p class="eyebrow">FOLLOW YOUR CONCERN</p>
+    <h2 class="section-title">A little peace of mind.</h2>
+    <p class="section-description">Enter the tracking ID you received when you submitted your report.</p>
+    <form @submit.prevent="loadStatus" class="tracking-form" :aria-busy="isLoading">
+      <label for="tracking-id">Tracking ID</label>
+      <div class="tracking-input-row"><input id="tracking-id" v-model="trackingId" autocomplete="off" spellcheck="false" maxlength="8" placeholder="e.g. a1b2c3d4" required :aria-invalid="Boolean(error)" :aria-describedby="error ? 'tracking-help tracking-error' : 'tracking-help'" /><button type="submit" class="primary-button" :disabled="isLoading"><span v-if="isLoading" class="spinner" aria-hidden="true"></span><AppIcon v-else name="search" />{{ isLoading ? 'Checking…' : 'Check status' }}</button></div>
+      <p id="tracking-help" class="small-note">Keep your ID private. Anyone with it can view your report.</p>
+    </form>
+    <p v-if="error" id="tracking-error" role="alert" class="feedback feedback-error"><AppIcon name="info" /><span>{{ error }}</span></p>
+    <div v-if="statusResult" class="status-result" role="status" aria-live="polite">
+      <div class="status-heading"><div><p class="eyebrow">CURRENT STATUS</p><h3>{{ statusResult.status === 'resolved' ? 'Your report is resolved' : 'Your report is with the team' }}</h3></div><span class="status-badge">{{ statusResult.status }}</span></div>
+      <dl class="status-details"><div><dt>Tracking ID</dt><dd class="mono">{{ statusResult.tracking_id }}</dd></div><div><dt>Reported on</dt><dd>{{ formattedDate }}</dd></div></dl>
+      <h4>Your description</h4><p class="report-description">{{ statusResult.description }}</p>
+      <p class="small-note">{{ statusResult.status === 'resolved' ? 'Staff have marked this report as resolved.' : 'Check back here for updates from staff.' }}</p>
     </div>
-
-    <div v-if="error" class="rounded-3xl border border-red-200 bg-red-50 p-5 text-sm text-red-700 dark:border-red-700/40 dark:bg-red-950/40 dark:text-red-200">{{ error }}</div>
-
-    <div v-if="statusResult" class="space-y-4 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-soft dark:border-slate-700/80 dark:bg-slate-950/90">
-      <div class="flex items-center justify-between gap-4">
-        <div>
-          <p class="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Current status</p>
-          <p class="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">{{ statusResult.status }}</p>
-        </div>
-        <span :class="statusBadge(statusResult.status)">{{ statusResult.status }}</span>
-      </div>
-
-      <div class="grid gap-4 sm:grid-cols-2">
-        <div class="rounded-3xl bg-slate-50 p-5 dark:bg-slate-900">
-          <p class="text-sm text-slate-500 dark:text-slate-400">Tracking ID</p>
-          <p class="mt-2 font-semibold text-slate-900 dark:text-slate-100">{{ statusResult.tracking_id }}</p>
-        </div>
-        <div class="rounded-3xl bg-slate-50 p-5 dark:bg-slate-900">
-          <p class="text-sm text-slate-500 dark:text-slate-400">Reported At</p>
-          <p class="mt-2 font-semibold text-slate-900 dark:text-slate-100">{{ formattedDate }}</p>
-        </div>
-      </div>
-
-      <div class="rounded-3xl bg-slate-50 p-5 dark:bg-slate-900">
-        <p class="text-sm text-slate-500 dark:text-slate-400">Description</p>
-        <p class="mt-3 text-slate-700 dark:text-slate-200 whitespace-pre-line">{{ statusResult.description }}</p>
-      </div>
-    </div>
+    <div v-else-if="!error && !isLoading" class="tracking-empty"><AppIcon name="search" /><p>Your report’s progress will appear here.</p><span>No need to submit the same concern again.</span></div>
   </div>
 </template>
-
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import axios from 'axios'
-
-const API_BASE = 'http://127.0.0.1:8000'
-const trackingId = ref('')
+import AppIcon from './AppIcon.vue'
+import { API_BASE, apiError } from '../utils/api'
+const props = defineProps({ initialId: { type: String, default: '' } })
+const trackingId = ref(props.initialId)
 const statusResult = ref(null)
 const error = ref('')
-
-const formattedDate = computed(() => {
-  if (!statusResult.value?.created_at) return '-'
-  return new Date(statusResult.value.created_at).toLocaleString()
-})
-
-function statusBadge(status) {
-  return status === 'resolved'
-    ? 'rounded-full bg-emerald-500 px-3 py-1 text-xs font-semibold text-white'
-    : 'rounded-full bg-amber-500 px-3 py-1 text-xs font-semibold text-slate-950'
-}
-
+const isLoading = ref(false)
+watch(() => props.initialId, id => { trackingId.value = id; statusResult.value = null; error.value = '' })
+const formattedDate = computed(() => statusResult.value?.created_at ? new Date(statusResult.value.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'Not available')
 async function loadStatus() {
+  if (isLoading.value) return
   error.value = ''
   statusResult.value = null
-  const id = trackingId.value.trim()
-  if (!id) {
-    error.value = 'Please enter a valid tracking ID.'
+  const id = trackingId.value.trim().toLowerCase()
+  if (!/^[a-f0-9]{8}$/.test(id)) {
+    error.value = 'Enter the 8-character ID provided when you submitted your report.'
     return
   }
-
+  isLoading.value = true
   try {
-    const response = await axios.get(`${API_BASE}/status/${encodeURIComponent(id)}`)
-    if (response.data.error) {
-      error.value = response.data.error
-    } else {
-      statusResult.value = response.data
-    }
+    const response = await axios.get(`${API_BASE}/status/${encodeURIComponent(id)}`, { timeout: 15000 })
+    if (response.data.error) error.value = 'We couldn’t find that report. Please double-check your tracking ID.'
+    else statusResult.value = response.data
   } catch (err) {
-    error.value = err.response?.data?.error || err.message || 'Unable to load complaint status.'
+    error.value = apiError(err, 'We couldn’t check your report right now. Please try again shortly.')
+  } finally {
+    isLoading.value = false
   }
 }
 </script>
